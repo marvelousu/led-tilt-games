@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>buzzer.cpp music preview</title>
+<style>
+body{font-family:sans-serif;background:#1e1e1e;color:#eee;padding:24px;line-height:1.55}
+h1{font-size:18px;margin:0 0 8px}
+small{color:#8a8a8a}
+button{font-size:14px;margin:4px;padding:8px 14px;cursor:pointer;border:0;border-radius:4px}
+.tune{background:#2e8b57;color:#fff}
+.tune:hover{background:#3aa76a}
+#stop{background:#9b3030;color:#fff}
+label{margin-left:16px}
+#now{color:#8fce8f;min-height:1.3em;margin-top:10px}
+#info{color:#c8c8c8}
+input[type=file]{margin:6px 0;color:#ddd}
+.drop{border:2px dashed #555;border-radius:6px;padding:14px;margin:8px 0}
+.drop.over{border-color:#3aa76a;background:#243024}
+</style></head><body>
+<h1>buzzer.cpp music preview</h1>
+<p><small>buzzer.cpp の Note 配列を矩形波で試聴します。ブラウザだけで動作し OS を選びません。
+下の枠に buzzer.cpp を選択 (またはドラッグ&ドロップ) してください。
+bgm_candidates.txt も一緒に選べば候補も鳴らせます。</small></p>
+
+<div class="drop" id="drop">
+  <input type="file" id="files" multiple accept=".cpp,.txt,.h,.ino">
+  <span id="info"> &nbsp;ファイル未読込</span>
+</div>
+
+<div id="buttons"></div>
+<p><button id="stop">STOP</button>
+<label><input type="checkbox" id="loop"> loop</label>
+<label><input type="checkbox" id="piezo" checked> piezo sim</label>
+<label>wave
+<select id="wave"><option>square</option><option>triangle</option><option>sine</option></select>
+</label></p>
+<p id="now"></p>
+<p><small>piezo sim = 実機ブザーの鳴り方を近似 (低音が痩せる)。OFF で本来の音程。</small></p>
+
+<script>
+let TUNES = {};
+let ctx = null, gen = 0;
+function setNow(s){ document.getElementById('now').textContent = s; }
+
+// buzzer.cpp 等のテキストから <NAME>_SEQ[] PROGMEM = { {f,d},... }; を抽出
+function parseTunes(text){
+  const tunes = {};
+  const blockRx = /(\w+_SEQ)\s*\[\]\s*PROGMEM\s*=\s*\{([\s\S]*?)\}\s*;/g;
+  let m;
+  while((m = blockRx.exec(text)) !== null){
+    const notes = [];
+    const noteRx = /\{\s*(\d+)\s*,\s*(\d+)\s*\}/g;
+    let n;
+    while((n = noteRx.exec(m[2])) !== null){
+      notes.push([parseInt(n[1],10), parseInt(n[2],10)]);
+    }
+    if(notes.length) tunes[m[1]] = notes;
+  }
+  return tunes;
+}
+
+function buildButtons(){
+  const bd = document.getElementById('buttons');
+  bd.innerHTML = '';
+  const keys = Object.keys(TUNES);
+  document.getElementById('info').textContent =
+    keys.length ? (' 読み込み: ' + keys.length + ' 曲') : ' 曲データが見つかりません';
+  for(const k of keys){
+    const b = document.createElement('button');
+    b.className = 'tune';
+    b.textContent = k + ' (' + TUNES[k].length + ')';
+    b.onclick = function(){ play(k); };
+    bd.appendChild(b);
+  }
+}
+
+function loadFiles(files){
+  if(!files || !files.length) return;
+  let combined = '';
+  let remaining = files.length;
+  for(let i=0;i<files.length;i++){
+    const fr = new FileReader();
+    fr.onload = function(){
+      combined += '\n' + fr.result;
+      if(--remaining === 0){ TUNES = parseTunes(combined); buildButtons(); }
+    };
+    fr.readAsText(files[i]);
+  }
+}
+
+document.getElementById('files').addEventListener('change', function(e){
+  loadFiles(e.target.files);
+});
+
+// ドラッグ&ドロップ対応
+const drop = document.getElementById('drop');
+drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', function(){ drop.classList.remove('over'); });
+drop.addEventListener('drop', function(e){
+  e.preventDefault(); drop.classList.remove('over');
+  loadFiles(e.dataTransfer.files);
+});
+
+function play(name){
+  gen++; const my = gen;
+  if(ctx){ try{ctx.close();}catch(e){} }
+  ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const c = ctx;
+  const wave = document.getElementById('wave').value;
+  const loop = document.getElementById('loop').checked;
+  const notes = TUNES[name];
+  // piezo sim: 急峻なハイパス + 共振ピークで実機ブザーの鳴り方に近づける
+  let out = c.destination;
+  if(document.getElementById('piezo').checked){
+    const hp1=c.createBiquadFilter(); hp1.type='highpass'; hp1.frequency.value=1900; hp1.Q.value=0.7;
+    const hp2=c.createBiquadFilter(); hp2.type='highpass'; hp2.frequency.value=1900; hp2.Q.value=0.7;
+    const hp3=c.createBiquadFilter(); hp3.type='highpass'; hp3.frequency.value=1900; hp3.Q.value=0.7;
+    const pk=c.createBiquadFilter();  pk.type='peaking';   pk.frequency.value=3000;  pk.Q.value=2.5; pk.gain.value=10;
+    const mk=c.createGain(); mk.gain.value=2.5;
+    hp1.connect(hp2); hp2.connect(hp3); hp3.connect(pk); pk.connect(mk); mk.connect(c.destination);
+    out = hp1;
+  }
+  (function run(){
+    if(my!==gen) return;
+    let t = c.currentTime + 0.05;
+    for(const nd of notes){
+      const f=nd[0], d=nd[1]/1000;
+      if(f>0){
+        const o=c.createOscillator(), g=c.createGain();
+        o.type=wave; o.frequency.value=f; g.gain.value=0.18;
+        o.connect(g).connect(out);
+        o.start(t); o.stop(t+d);
+      }
+      t += d;
+    }
+    const ms = (t - c.currentTime) * 1000;
+    setNow('playing: ' + name + (document.getElementById('piezo').checked ? '  [piezo]' : '  [clean]'));
+    setTimeout(function(){ if(my!==gen) return; if(loop) run(); else setNow(''); }, ms);
+  })();
+}
+function stop(){ gen++; if(ctx){ try{ctx.close();}catch(e){} ctx=null; } setNow(''); }
+document.getElementById('stop').onclick = stop;
+</script></body></html>
