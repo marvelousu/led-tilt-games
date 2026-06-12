@@ -9,7 +9,7 @@ enum SoundEffect {
     SE_BOOT,      // 起動アニメ: 5音上昇アルペジオ
     SE_WARN,      // 警告: 1000Hz 短音 2発
     SE_CLEAR,     // クリア: 4音上昇
-    SE_HIT,       // 衝突: E5→C4 下降
+    SE_HIT,       // 衝突: E5→C5 下降
     SE_MENU,      // メニュー遷移: 短い上昇ブリップ
 };
 

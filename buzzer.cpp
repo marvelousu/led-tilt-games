@@ -62,9 +62,11 @@ static const Note SE_CATCH_SEQ[] PROGMEM = {
 };
 static const uint8_t SE_CATCH_LEN = 3;
 
-// ---- SE: ゲームオーバー (下降) ----
+// ---- SE: ゲームオーバー (A5-F5-D5-B4 下降) ----
+//   元は A4 始まりだったが 366Hz 未満 (F4/D4/B3) を含み音程が外れる
+//   ため全体を 1 オクターブ上へ移調 (旋律の下降形はそのまま)。
 static const Note SE_GAMEOVER_SEQ[] PROGMEM = {
-    {440, 150}, {349, 150}, {294, 150}, {247, 300},
+    {880, 150}, {698, 150}, {587, 150}, {494, 300},
 };
 static const uint8_t SE_GAMEOVER_LEN = 4;
 
@@ -92,9 +94,11 @@ static const Note SE_CLEAR_SEQ[] PROGMEM = {
 };
 static const uint8_t SE_CLEAR_LEN = 4;
 
-// ---- SE: ヒット (E5→C4 下降 計 200ms) ----
+// ---- SE: ヒット (E5→C5 下降 計 200ms) ----
+//   元は E5→C4 だったが C4 (262Hz) は 366Hz 未満で音程が外れる
+//   ため C5 へオクターブ上げ (下降の性格はそのまま)。
 static const Note SE_HIT_SEQ[] PROGMEM = {
-    {659, 100}, {262, 100},
+    {659, 100}, {523, 100},
 };
 static const uint8_t SE_HIT_LEN = 2;
 
